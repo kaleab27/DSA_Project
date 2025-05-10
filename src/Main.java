@@ -1,3 +1,5 @@
+import objects.Commit;
+import objects.Object;
 import java.util.Objects;
 
 import static utils.Hasher.computeSHA1;
@@ -20,5 +22,18 @@ public class Main {
         String hash = computeSHA1(input);
         System.out.println("Input: " + input);
         System.out.println("SHA-1 Hash: " + hash);
+
+        // Test the Git Object
+        Object blobObject = new Object("blob", "Hello, Git!");
+        System.out.println("Type: " + blobObject.getType());
+        System.out.println("Content: " + blobObject.getContent());
+        System.out.println("Hash: " + blobObject.getHash());
+        System.out.println("Object: " + blobObject);
+
+        // Test the Commit Git Object
+        String treeHash = "abc123treehash";
+        String parentHash = null;
+        Commit commit = new Commit(treeHash, parentHash, "John Doe <john@example.com>", "Initial commit");
+        System.out.println(commit);
     }
 }

@@ -4,6 +4,13 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Utility class for hashing operations.
+ *
+ * This class provides methods for generating cryptographic hashes, such as SHA-1,
+ * which can be used for data integrity verification and unique identifier generation.
+ * It encapsulates common hashing functionality in an easy-to-use interface.
+ */
 public class Hasher {
 
     /**

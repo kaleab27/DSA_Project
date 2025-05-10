@@ -2,88 +2,123 @@ package data_structures;
 
 import java.util.Objects;
 
+/**
+ * A custom implementation of a HashMap data structure that maps keys to values.
+ * This implementation uses a hash table with separate chaining for collision resolution.
+ *
+ * @param <K> The type of keys maintained by this map.
+ * @param <V> The type of values associated with keys in this map.
+ */
 @SuppressWarnings("unchecked")
 public class CustomHashMap<K, V> {
-    // Initial capacity and load factor for resizing
     private static final int INITIAL_CAPACITY = 16;
     private static final float LOAD_FACTOR = 0.75f;
 
-    // Internal storage (array of CustomLinkedList for collision handling)
     private CustomLinkedList<Node<K, V>>[] buckets;
-    private int size; // Number of elements in the map
+    private int size;
 
-    // Constructor
+    /**
+     * Constructs an empty {@code CustomHashMap} with the default initial capacity.
+     */
     public CustomHashMap() {
         this.buckets = new CustomLinkedList[INITIAL_CAPACITY];
         this.size = 0;
     }
 
-    // Node class for key-value pairs
+    /**
+     * Represents an individual key-value pair in the hash map.
+     *
+     * @param <K> The type of the key.
+     * @param <V> The type of the value.
+     */
     private static class Node<K, V> {
         K key;
         V value;
 
+        /**
+         * Constructs a new {@code Node} with the specified key and value.
+         *
+         * @param key   The key of the mapping.
+         * @param value The value of the mapping.
+         */
         Node(K key, V value) {
             this.key = key;
             this.value = value;
         }
     }
 
-    // Hash function to map keys to bucket indices
+    /**
+     * Calculates the index of the bucket for a given key by computing its hash.
+     *
+     * @param key The key for which the bucket index is calculated.
+     * @return The index of the bucket in the hash table.
+     */
     private int getBucketIndex(K key) {
         int hash = Objects.hashCode(key);
         return Math.abs(hash) % buckets.length;
     }
 
-    // PUT method: Add or update a key-value pair
+    /**
+     * Associates the specified value with the specified key in this map.
+     * If the map previously contained a mapping for the key, the old value is replaced.
+     *
+     * @param key   The key with which the specified value is to be associated.
+     * @param value The value to be associated with the specified key.
+     */
     public void put(K key, V value) {
         int bucketIndex = getBucketIndex(key);
 
-        // Initialize the CustomLinkedList for the bucket if null
         if (buckets[bucketIndex] == null) {
             buckets[bucketIndex] = new CustomLinkedList<>();
         }
 
         CustomLinkedList<Node<K, V>> bucket = buckets[bucketIndex];
 
-        // Iterate through the bucket to check for the key's existence
         for (int i = 0; i < bucket.size(); i++) {
             Node<K, V> node = bucket.get(i);
             if (Objects.equals(node.key, key)) {
-                node.value = value; // Update the value if key exists
+                node.value = value;
                 return;
             }
         }
 
-        // Key not found; add a new node
         bucket.add(new Node<>(key, value));
         size++;
 
-        // Resize if the load factor threshold is exceeded
         if ((1.0 * size) / buckets.length > LOAD_FACTOR) {
             resize();
         }
     }
 
-    // GET method: Retrieve the value for a given key
+    /**
+     * Returns the value to which the specified key is mapped, or {@code null}
+     * if this map contains no mapping for the key.
+     *
+     * @param key The key whose associated value is to be returned.
+     * @return The value associated with the specified key, or {@code null} if no mapping exists.
+     */
     public V get(K key) {
         int bucketIndex = getBucketIndex(key);
         CustomLinkedList<Node<K, V>> bucket = buckets[bucketIndex];
 
         if (bucket != null) {
-            // Iterate through the bucket to find the key
             for (int i = 0; i < bucket.size(); i++) {
                 Node<K, V> node = bucket.get(i);
                 if (Objects.equals(node.key, key)) {
-                    return node.value; // Key found, return the value
+                    return node.value;
                 }
             }
         }
 
-        return null; // Key not found
+        return null;
     }
 
-    // REMOVE method: Remove a key-value pair by key
+    /**
+     * Removes the mapping for a key from this map if it is present.
+     *
+     * @param key The key whose mapping is to be removed.
+     * @return The value that was associated with the key, or {@code null} if no mapping existed.
+     */
     public V remove(K key) {
         int bucketIndex = getBucketIndex(key);
         CustomLinkedList<Node<K, V>> bucket = buckets[bucketIndex];
@@ -92,17 +127,22 @@ public class CustomHashMap<K, V> {
             for (int i = 0; i < bucket.size(); i++) {
                 Node<K, V> node = bucket.get(i);
                 if (Objects.equals(node.key, key)) {
-                    bucket.remove(i); // Remove the node
+                    bucket.remove(i);
                     size--;
-                    return node.value; // Return the removed value
+                    return node.value;
                 }
             }
         }
 
-        return null; // Key not found
+        return null;
     }
 
-    // CONTAINS KEY method: Check if the given key exists in the map
+    /**
+     * Returns {@code true} if this map contains a mapping for the specified key.
+     *
+     * @param key The key whose presence is to be tested.
+     * @return {@code true} if this map contains a mapping for the key, {@code false} otherwise.
+     */
     public boolean containsKey(K key) {
         int bucketIndex = getBucketIndex(key);
         CustomLinkedList<Node<K, V>> bucket = buckets[bucketIndex];
@@ -111,21 +151,23 @@ public class CustomHashMap<K, V> {
             for (int i = 0; i < bucket.size(); i++) {
                 Node<K, V> node = bucket.get(i);
                 if (Objects.equals(node.key, key)) {
-                    return true; // Key exists
+                    return true;
                 }
             }
         }
 
-        return false; // Key not found
+        return false;
     }
 
-    // RESIZE method: Resize the buckets array and rehash keys
+    /**
+     * Resizes the hash table when the current load factor exceeds the threshold.
+     * This involves doubling the size of the buckets array and rehashing all entries.
+     */
     private void resize() {
         CustomLinkedList<Node<K, V>>[] oldBuckets = buckets;
         buckets = new CustomLinkedList[oldBuckets.length * 2];
         size = 0;
 
-        // Rehash and reinsert all entries
         for (CustomLinkedList<Node<K, V>> bucket : oldBuckets) {
             if (bucket != null) {
                 for (int i = 0; i < bucket.size(); i++) {
@@ -136,7 +178,11 @@ public class CustomHashMap<K, V> {
         }
     }
 
-    // SIZE method: Return the number of elements in the map
+    /**
+     * Returns the number of key-value mappings in this map.
+     *
+     * @return The number of key-value mappings in this map.
+     */
     public int size() {
         return size;
     }
