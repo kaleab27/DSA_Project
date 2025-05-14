@@ -100,14 +100,12 @@ public class Repository {
             return;
         }
 
-        // Store the actual file contents before creating the tree hash
         HashMap<String, String> commitFiles = new HashMap<>();
         for (var entry : trackedFiles.entrySet()) {
             String fileName = entry.getKey();
             String fileHash = entry.getValue();
             commitFiles.put(fileName, fileHash);
-            
-            // Ensure file content is stored
+
             if (!fileContents.containsKey(fileHash)) {
                 try {
                     String content = Files.readString(Paths.get(path + "/" + fileName));
@@ -128,8 +126,7 @@ public class Repository {
         String treeHash = computeSHA1(treeBuilder.toString());
         String parentHash = currentCommit != null ? currentCommit.getHash() : null;
         Commit newCommit = new Commit(treeHash, parentHash, author, message);
-        
-        // Store the snapshot with the actual file hashes
+
         commitSnapshots.put(newCommit.getHash(), new HashMap<>(commitFiles));
         commitHistory.add(newCommit);
         currentCommit = newCommit;
@@ -217,8 +214,7 @@ public class Repository {
                 HashMap<String, String> snapshot = commitSnapshots.get(commitHash);
                 if (snapshot != null) {
                     trackedFiles.clear();
-                    
-                    // Restore each file from the snapshot
+
                     for (var entry : snapshot.entrySet()) {
                         String fileName = entry.getKey();
                         String fileHash = entry.getValue();
@@ -226,7 +222,6 @@ public class Repository {
                         
                         if (content != null) {
                             try {
-                                // Write the content back to the actual file
                                 Files.writeString(Paths.get(path + "/" + fileName), content);
                                 trackedFiles.put(fileName, fileHash);
                                 System.out.println("Restored file: " + fileName);
@@ -255,6 +250,12 @@ public class Repository {
         System.out.println("Commit with hash " + commitHash + " not found.");
     }
 
+    /**
+     * Saves the current state of the index file.
+     *
+     * This method serializes the tracked files along with their corresponding file hashes
+     * and writes the data to the index file to persist the current state.
+     */
     private void saveIndex() {
         try {
             Properties props = new Properties();
@@ -271,6 +272,12 @@ public class Repository {
         }
     }
 
+    /**
+     * Loads the index from the saved state.
+     *
+     * This method reconstructs the tracked files by reading from the index file
+     * and initializing the `trackedFiles` map with their previous state.
+     */
     private void loadIndex() {
         try {
             Properties props = new Properties();
@@ -282,6 +289,12 @@ public class Repository {
         }
     }
 
+    /**
+     * Saves all commits into a persistent storage file.
+     *
+     * This method serializes all commits from the commit history and writes them to
+     * a storage file for later retrieval.
+     */
     private void saveCommits() {
         try {
             StringBuilder sb = new StringBuilder();
@@ -317,6 +330,12 @@ public class Repository {
         }
     }
 
+    /**
+     * Loads commits from the storage file.
+     *
+     * This method reads the serialized commit objects and initializes the commit history
+     * in the repository using the corresponding `Commit` object instances.
+     */
     private void loadCommits() {
         try {
             try {
@@ -370,7 +389,14 @@ public class Repository {
         } catch (IOException e) {
         }
     }
-    
+
+    /**
+     * Saves the current state of the HEAD pointer.
+     *
+     * The HEAD pointer identifies the current commit. This method serializes the
+     * current HEAD's position and writes it to a file to ensure that future operations
+     * know the latest commit state.
+     */
     private void saveHEAD() {
         try {
             if (currentCommit != null) {
@@ -380,7 +406,13 @@ public class Repository {
             System.err.println("Error saving HEAD: " + e.getMessage());
         }
     }
-    
+
+    /**
+     * Loads the state of the HEAD pointer.
+     *
+     * This method reads the stored HEAD pointer data, initializing the repository to
+     * point to the corresponding `Commit` object identified as the current HEAD.
+     */
     private void loadHEAD() {
         try {
             String headHash = Files.readString(Paths.get(path + "/.git/HEAD")).trim();
@@ -393,7 +425,14 @@ public class Repository {
         } catch (IOException e) {
         }
     }
-    
+
+    /**
+     * A subclass of {@link Commit} that represents a commit restored from persistent storage.
+     *
+     * This class extends the functionality of the parent `Commit` class to include additional
+     * metadata that was preserved when the commit was serialized. It allows for detailed
+     * reconstruction of the commit history with its original state.
+     */
     private static class RestoredCommit extends Commit {
         private final String originalHash;
         private final Instant originalTimestamp;
@@ -401,7 +440,17 @@ public class Repository {
         private final String originalParentHash;
         private final String originalAuthor;
         private final String originalMessage;
-    
+
+        /**
+         * Constructs a new {@code RestoredCommit} instance with its original metadata.
+         *
+         * @param originalHash        The original hash of the restored commit.
+         * @param originalTimestamp   The original timestamp of the restored commit.
+         * @param originalTreeHash    The tree hash representing the file snapshot of the restored commit.
+         * @param originalParentHash  The hash of the parent commit (or null if this is the first commit).
+         * @param originalMessage     The original commit message.
+         * @param author              The author of this commit.
+         */
         public RestoredCommit(String hash, String treeHash, String parentHash, String author, Instant timestamp, String message) {
             super(treeHash, parentHash, author, message);
             this.originalHash = hash;
@@ -411,32 +460,62 @@ public class Repository {
             this.originalAuthor = author;
             this.originalMessage = message;
         }
-    
+
+        /**
+         * Returns the original hash of this commit.
+         *
+         * @return The hash as a string.
+         */
         @Override
         public String getHash() {
             return originalHash;
         }
-    
+
+        /**
+         * Returns the original timestamp when the commit was made.
+         *
+         * @return The timestamp as an {@link Instant} object.
+         */
         @Override
         public Instant getTimestamp() {
             return originalTimestamp;
         }
-        
+
+        /**
+         * Returns the original tree hash that represents the state of the repository for this commit.
+         *
+         * @return The tree hash as a string.
+         */
         @Override
         public String getTreeHash() {
             return originalTreeHash;
         }
-        
+
+        /**
+         * Returns the original parent hash of this commit.
+         *
+         * @return The hash of the parent commit, or null if this was the first commit.
+         */
         @Override
         public String getParentHash() {
             return originalParentHash;
         }
-        
+
+        /**
+         * Returns the original author of the commit.
+         *
+         * @return The author as a string.
+         */
         @Override
         public String getAuthor() {
             return originalAuthor;
         }
-        
+
+        /**
+         * Returns the original commit message.
+         *
+         * @return The commit message as a string.
+         */
         @Override
         public String getMessage() {
             return originalMessage;
