@@ -4,6 +4,10 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Properties;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.time.Instant;
 
 import static utils.Hasher.computeSHA1;
 import objects.Commit;
@@ -22,6 +26,7 @@ public class Repository {
     private Commit currentCommit;
     private final HashMap<String, String> fileContents;
     private final HashMap<String, HashMap<String, String>> commitSnapshots;
+    private final String indexPath;
 
     /**
      * Constructs a new {@code Repository} instance with the specified path.
@@ -35,6 +40,10 @@ public class Repository {
         this.currentCommit = null;
         this.fileContents = new HashMap<>();
         this.commitSnapshots = new HashMap<>();
+        this.indexPath = path + "/.git/index";
+
+        loadIndex();
+        loadCommits();
     }
 
     /**
@@ -64,12 +73,10 @@ public class Repository {
         if (file.exists()) {
             try {
                 String content = Files.readString(Paths.get(file.getPath()));
-                
                 String fileHash = computeSHA1(content);
-                
                 fileContents.put(fileHash, content);
-                
                 trackedFiles.put(fileName, fileHash);
+                saveIndex();
                 
                 System.out.println("File added to repository: " + fileName);
             } catch (IOException e) {
@@ -93,22 +100,43 @@ public class Repository {
             return;
         }
 
+        // Store the actual file contents before creating the tree hash
+        HashMap<String, String> commitFiles = new HashMap<>();
+        for (var entry : trackedFiles.entrySet()) {
+            String fileName = entry.getKey();
+            String fileHash = entry.getValue();
+            commitFiles.put(fileName, fileHash);
+            
+            // Ensure file content is stored
+            if (!fileContents.containsKey(fileHash)) {
+                try {
+                    String content = Files.readString(Paths.get(path + "/" + fileName));
+                    fileContents.put(fileHash, content);
+                } catch (IOException e) {
+                    System.err.println("Error reading file content: " + fileName);
+                }
+            }
+        }
+
         StringBuilder treeBuilder = new StringBuilder();
         for (var entry : trackedFiles.entrySet()) {
             String fileName = entry.getKey();
             String fileHash = entry.getValue();
             treeBuilder.append(fileName).append(fileHash);
         }
+
         String treeHash = computeSHA1(treeBuilder.toString());
-
         String parentHash = currentCommit != null ? currentCommit.getHash() : null;
-
         Commit newCommit = new Commit(treeHash, parentHash, author, message);
         
-        commitSnapshots.put(newCommit.getHash(), new HashMap<>(trackedFiles));
-        
+        // Store the snapshot with the actual file hashes
+        commitSnapshots.put(newCommit.getHash(), new HashMap<>(commitFiles));
         commitHistory.add(newCommit);
         currentCommit = newCommit;
+
+        trackedFiles.clear();
+        saveIndex();
+        saveCommits();
 
         System.out.println("Commit successful!");
         System.out.println("Commit details:");
@@ -141,20 +169,21 @@ public class Repository {
      * based on the current commit's tree hash.
      */
     public void status() {
-        if (currentCommit == null) {
-            System.out.println("No commits yet. Nothing to display.");
-            return;
+        System.out.println("Repository status:");
+        
+        if (!trackedFiles.isEmpty()) {
+            System.out.println("Staged files:");
+            for (String fileName : trackedFiles.keySet()) {
+                System.out.println("    " + fileName);
+            }
+        } else {
+            System.out.println("No files staged for commit");
         }
-
-        System.out.println("Current commit: " + currentCommit.getHash());
-        System.out.println("Files tracked in this commit:");
-        if (trackedFiles.isEmpty()) {
-            System.out.println("    (No files tracked)");
-            return;
-        }
-
-        for (String fileName : trackedFiles.keySet()) {
-            System.out.println("    " + fileName + " -> " + trackedFiles.get(fileName));
+        
+        if (currentCommit != null) {
+            System.out.println("Current commit: " + currentCommit.getHash());
+        } else {
+            System.out.println("No commits yet");
         }
     }
 
@@ -188,7 +217,31 @@ public class Repository {
                 HashMap<String, String> snapshot = commitSnapshots.get(commitHash);
                 if (snapshot != null) {
                     trackedFiles.clear();
-                    trackedFiles.putAll(snapshot);
+                    
+                    // Restore each file from the snapshot
+                    for (var entry : snapshot.entrySet()) {
+                        String fileName = entry.getKey();
+                        String fileHash = entry.getValue();
+                        String content = fileContents.get(fileHash);
+                        
+                        if (content != null) {
+                            try {
+                                // Write the content back to the actual file
+                                Files.writeString(Paths.get(path + "/" + fileName), content);
+                                trackedFiles.put(fileName, fileHash);
+                                System.out.println("Restored file: " + fileName);
+                            } catch (IOException e) {
+                                System.err.println("Error restoring file " + fileName + ": " + e.getMessage());
+                            }
+                        } else {
+                            System.err.println("Content not found for file: " + fileName + " (hash: " + fileHash + ")");
+                        }
+                    }
+                    
+                    // Clear the stage after checkout
+                    trackedFiles.clear();
+                    saveIndex();
+                    saveHEAD();
                 }
                 
                 System.out.println("Checked out commit " + commitHash);
@@ -200,5 +253,193 @@ public class Repository {
         }
 
         System.out.println("Commit with hash " + commitHash + " not found.");
+    }
+
+    private void saveIndex() {
+        try {
+            Properties props = new Properties();
+            for (var entry : trackedFiles.entrySet()) {
+                props.setProperty(entry.getKey(), entry.getValue());
+            }
+            File gitDir = new File(path + "/.git");
+            if (!gitDir.exists()) {
+                gitDir.mkdirs();
+            }
+            props.store(new FileOutputStream(indexPath), "Staged files");
+        } catch (IOException e) {
+            System.err.println("Error saving index: " + e.getMessage());
+        }
+    }
+
+    private void loadIndex() {
+        try {
+            Properties props = new Properties();
+            props.load(new FileInputStream(indexPath));
+            for (String key : props.stringPropertyNames()) {
+                trackedFiles.put(key, props.getProperty(key));
+            }
+        } catch (IOException e) {
+        }
+    }
+
+    private void saveCommits() {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (Commit commit : commitHistory) {
+                sb.append(commit.getHash()).append("|")
+                  .append(commit.getTreeHash()).append("|")
+                  .append(commit.getParentHash() != null ? commit.getParentHash() : "null").append("|")
+                  .append(commit.getAuthor()).append("|")
+                  .append(commit.getTimestamp()).append("|")
+                  .append(commit.getMessage().replace("\n", "\\n")).append("|");
+                
+                HashMap<String, String> snapshot = commitSnapshots.get(commit.getHash());
+                if (snapshot != null) {
+                    for (var entry : snapshot.entrySet()) {
+                        sb.append(entry.getKey()).append("=").append(entry.getValue()).append(";");
+                    }
+                }
+                sb.append("\n");
+            }
+
+            Files.writeString(Paths.get(path + "/.git/commits"), sb.toString());
+            
+            StringBuilder fileContentsSb = new StringBuilder();
+            for (var entry : fileContents.entrySet()) {
+                fileContentsSb.append(entry.getKey()).append("|")
+                            .append(entry.getValue().replace("\n", "\\n")).append("\n");
+            }
+            Files.writeString(Paths.get(path + "/.git/contents"), fileContentsSb.toString());
+            
+            saveHEAD();
+        } catch (IOException e) {
+            System.err.println("Error saving commits: " + e.getMessage());
+        }
+    }
+
+    private void loadCommits() {
+        try {
+            try {
+                String contentsData = Files.readString(Paths.get(path + "/.git/contents"));
+                String[] lines = contentsData.split("\n");
+                for (String line : lines) {
+                    if (!line.trim().isEmpty()) {
+                        String[] parts = line.split("\\|", 2);
+                        if (parts.length == 2) {
+                            fileContents.put(parts[0], parts[1].replace("\\n", "\n"));
+                        }
+                    }
+                }
+            } catch (IOException e) {
+            }
+            
+            String content = Files.readString(Paths.get(path + "/.git/commits"));
+            String[] lines = content.split("\n");
+            for (String line : lines) {
+                if (!line.trim().isEmpty()) {
+                    String[] parts = line.split("\\|");
+                    if (parts.length >= 6) {
+                        String hash = parts[0];
+                        String treeHash = parts[1];
+                        String parentHash = parts[2].equals("null") ? null : parts[2];
+                        String author = parts[3];
+                        Instant timestamp = Instant.parse(parts[4]);
+                        String message = parts[5].replace("\\n", "\n");
+                        
+                        Commit commit = new RestoredCommit(hash, treeHash, parentHash, author, timestamp, message);
+                        commitHistory.add(commit);
+                        
+                        HashMap<String, String> snapshot = new HashMap<>();
+                        if (parts.length > 6 && !parts[6].trim().isEmpty()) {
+                            String[] fileEntries = parts[6].split(";");
+                            for (String entry : fileEntries) {
+                                if (!entry.trim().isEmpty()) {
+                                    String[] fileData = entry.split("=", 2);
+                                    if (fileData.length == 2) {
+                                        snapshot.put(fileData[0], fileData[1]);
+                                    }
+                                }
+                            }
+                        }
+                        commitSnapshots.put(hash, snapshot);
+                    }
+                }
+            }
+            
+            loadHEAD();
+        } catch (IOException e) {
+        }
+    }
+    
+    private void saveHEAD() {
+        try {
+            if (currentCommit != null) {
+                Files.writeString(Paths.get(path + "/.git/HEAD"), currentCommit.getHash());
+            }
+        } catch (IOException e) {
+            System.err.println("Error saving HEAD: " + e.getMessage());
+        }
+    }
+    
+    private void loadHEAD() {
+        try {
+            String headHash = Files.readString(Paths.get(path + "/.git/HEAD")).trim();
+            for (Commit commit : commitHistory) {
+                if (commit.getHash().equals(headHash)) {
+                    currentCommit = commit;
+                    break;
+                }
+            }
+        } catch (IOException e) {
+        }
+    }
+    
+    private static class RestoredCommit extends Commit {
+        private final String originalHash;
+        private final Instant originalTimestamp;
+        private final String originalTreeHash;
+        private final String originalParentHash;
+        private final String originalAuthor;
+        private final String originalMessage;
+    
+        public RestoredCommit(String hash, String treeHash, String parentHash, String author, Instant timestamp, String message) {
+            super(treeHash, parentHash, author, message);
+            this.originalHash = hash;
+            this.originalTimestamp = timestamp;
+            this.originalTreeHash = treeHash;
+            this.originalParentHash = parentHash;
+            this.originalAuthor = author;
+            this.originalMessage = message;
+        }
+    
+        @Override
+        public String getHash() {
+            return originalHash;
+        }
+    
+        @Override
+        public Instant getTimestamp() {
+            return originalTimestamp;
+        }
+        
+        @Override
+        public String getTreeHash() {
+            return originalTreeHash;
+        }
+        
+        @Override
+        public String getParentHash() {
+            return originalParentHash;
+        }
+        
+        @Override
+        public String getAuthor() {
+            return originalAuthor;
+        }
+        
+        @Override
+        public String getMessage() {
+            return originalMessage;
+        }
     }
 }
