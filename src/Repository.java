@@ -444,11 +444,11 @@ public class Repository {
         /**
          * Constructs a new {@code RestoredCommit} instance with its original metadata.
          *
-         * @param originalHash        The original hash of the restored commit.
-         * @param originalTimestamp   The original timestamp of the restored commit.
-         * @param originalTreeHash    The tree hash representing the file snapshot of the restored commit.
-         * @param originalParentHash  The hash of the parent commit (or null if this is the first commit).
-         * @param originalMessage     The original commit message.
+         * @param hash        The original hash of the restored commit.
+         * @param timestamp   The original timestamp of the restored commit.
+         * @param treeHash    The tree hash representing the file snapshot of the restored commit.
+         * @param parentHash  The hash of the parent commit (or null if this is the first commit).
+         * @param message     The original commit message.
          * @param author              The author of this commit.
          */
         public RestoredCommit(String hash, String treeHash, String parentHash, String author, Instant timestamp, String message) {
