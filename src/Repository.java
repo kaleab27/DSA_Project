@@ -285,7 +285,7 @@ public class Repository {
             for (String key : props.stringPropertyNames()) {
                 trackedFiles.put(key, props.getProperty(key));
             }
-        } catch (IOException e) {
+        } catch (IOException _) {
         }
     }
 
@@ -349,7 +349,7 @@ public class Repository {
                         }
                     }
                 }
-            } catch (IOException e) {
+            } catch (IOException _) {
             }
             
             String content = Files.readString(Paths.get(path + "/.git/commits"));
@@ -386,7 +386,7 @@ public class Repository {
             }
             
             loadHEAD();
-        } catch (IOException e) {
+        } catch (IOException _) {
         }
     }
 
@@ -422,7 +422,7 @@ public class Repository {
                     break;
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException _) {
         }
     }
 
